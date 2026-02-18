@@ -1,4 +1,4 @@
-#include <Eigen/Eigen>
+#include <eigen3/Eigen/Eigen>
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
@@ -44,11 +44,17 @@ Eigen::Matrix4f get_projection_matrix(float eye_fov,
     // Hint: Trigonometric functions in C++ expect radians.
     // float rad_fov = ...
 
+    float rad_fov = eye_fov * 3.14f / 180.0f;
+    
+
     // TODO 2: Compute the top (t) and right (r) values of the near plane.
     // Hint: Use tan(fov / 2) and the absolute value of zNear.
     // float t = ...
     // float r = ...
 
+    
+    
+    
     // TODO 3: Construct the perspective-to-orthographic projection matrix.
     // This matrix converts the frustum into a cuboid.
     Eigen::Matrix4f persp_to_ortho = Eigen::Matrix4f::Identity();
