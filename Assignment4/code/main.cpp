@@ -33,21 +33,30 @@ float initial_z_rotation = 0.0f;
 Eigen::Matrix3f rotX(float a) {
     // TODO: Replace the Identity return with the correct 3x3 rotation matrix
     //       around the X axis by angle `a` (in radians).
-    return Eigen::Matrix3f::Identity();
+    Eigen::Matrix3f R;
+    R << 1, 0, 0,
+        0, cos(a), -sin(a),
+        0, sin(a), cos(a);
+    return R;
 
 }
 Eigen::Matrix3f rotY(float a) {
     // TODO: Replace the Identity return with the correct 3x3 rotation matrix
     //       around the Y axis by angle `a` (in radians).
-    return Eigen::Matrix3f::Identity();
-
-
+    Eigen::Matrix3f R;
+    R << cos(a), 0.0, sin(a),
+      0, 1, 0,
+      -sin(a), 0, cos(a);
+    return R;
 }
 Eigen::Matrix3f rotZ(float a) {
     // TODO: Replace the Identity return with the correct 3x3 rotation matrix
     //       around the Z axis by angle `a` (in radians).
-    return Eigen::Matrix3f::Identity();
-
+    Eigen::Matrix3f R;
+    R << cos(a), -sin(a), 0,
+      sin(a), cos(a), 0,
+      0, 0, 1;
+    return R;
 }
 
 Eigen::Vector3f de_casteljau(std::vector<Eigen::Vector3f> pts, float t) {
@@ -55,6 +64,7 @@ Eigen::Vector3f de_casteljau(std::vector<Eigen::Vector3f> pts, float t) {
     //       Repeatedly reduce the point list by linearly interpolating each
     //       consecutive pair using parameter t, until one point remains.
     //       Return that final point.
+
     return pts[0];
 }
 
