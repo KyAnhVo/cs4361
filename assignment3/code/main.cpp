@@ -1,0 +1,294 @@
+
+#include <iostream>
+#include <opencv2/opencv.hpp>
+
+#include "OBJ_Loader.h"
+#include "Shader.hpp"
+#include "Texture.hpp"
+#include "Triangle.hpp"
+#include "global.hpp"
+#include "rasterizer.hpp"
+#include "main.h"
+
+Eigen::Matrix4f get_view_matrix(Eigen::Vector3f eye_pos) {
+  Eigen::Matrix4f view = Eigen::Matrix4f::Identity();
+
+  Eigen::Matrix4f translate;
+  translate << 1, 0, 0, -eye_pos[0], 0, 1, 0, -eye_pos[1], 0, 0, 1, -eye_pos[2],
+      0, 0, 0, 1;
+
+  view = translate * view;
+  return view;
+}
+
+Eigen::Matrix4f get_model_matrix(float angle) {
+  Eigen::Matrix4f rotation;
+  angle = angle * MY_PI / 180.f;
+  rotation << cos(angle), 0, sin(angle), 0, 0, 1, 0, 0, -sin(angle), 0,
+      cos(angle), 0, 0, 0, 0, 1;
+
+  Eigen::Matrix4f scale;
+  scale << 2.5, 0, 0, 0, 0, 2.5, 0, 0, 0, 0, 2.5, 0, 0, 0, 0, 1;
+
+  Eigen::Matrix4f translate;
+  translate << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1;
+
+  return translate * rotation * scale;
+}
+
+
+Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio,
+                                      float zNear, float zFar) {
+  // TODO: Use the same projection matrix from the previous assignments.
+  // TODO: Implement this function
+  // Create the projection matrix for the given parameters.
+  // Then return it.
+    // TODO 1: Convert the field-of-view from degrees to radians.
+    // Hint: Trigonometric functions in C++ expect radians.
+    // float rad_fov = ...
+
+    float rad_fov = eye_fov * 3.14f / 180.0f;
+    
+    // TODO 2: Compute the top (t) and right (r) values of the near plane.
+    // Hint: Use tan(fov / 2) and the absolute value of zNear.
+    // float t = ...
+    // float r = ...
+
+    float t = std::tan(rad_fov / 2.0f) * std::abs(zNear);
+    float r = t * aspect_ratio;
+    float l = -r;
+    float b = -t;
+    
+    // TODO 3: Construct the perspective-to-orthographic projection matrix.
+    // This matrix converts the frustum into a cuboid.
+    Eigen::Matrix4f persp_to_ortho = Eigen::Matrix4f::Identity();
+    // Fill in the matrix elements
+
+    persp_to_ortho <<   zNear,  0,          0,          0,
+                        0,      zNear,      0,          0,
+                        0,      0,          zNear+zFar, -zNear*zFar,
+                        0,      0,          1,          0;
+
+    // TODO 4: Construct the orthographic projection matrix.
+    // This matrix maps the cuboid into normalized device coordinates.
+    Eigen::Matrix4f ortho = Eigen::Matrix4f::Identity();
+    // Fill in the matrix elements
+    ortho <<    2.0f / (r - l), 0,              0,                      -(r + l) / 2.0f,
+                0,              2.0f / (t - b), 0,                      -(t + b) / 2.0f,
+                0,              0,              2.0f / -(zFar - zNear),  -(zFar + zNear) / 2.0f,
+                0,              0,              0,                      1;
+
+    // TODO 5: Combine the orthographic and perspective matrices.
+    // Hint: The order of multiplication matters.
+    Eigen::Matrix4f projection = Eigen::Matrix4f::Identity();
+    // projection = ...
+    projection = ortho * persp_to_ortho;
+
+    return projection;
+}
+
+
+Eigen::Vector3f vertex_shader(const vertex_shader_payload& payload) {
+  return payload.position;
+}
+
+Eigen::Vector3f normal_fragment_shader(const fragment_shader_payload& payload) {
+  Eigen::Vector3f return_color = (payload.normal.head<3>().normalized() +
+                                  Eigen::Vector3f(1.0f, 1.0f, 1.0f)) /
+                                 2.f;
+  Eigen::Vector3f result;
+  result << return_color.x() * 255, return_color.y() * 255,
+      return_color.z() * 255;
+  return result;
+}
+
+static Eigen::Vector3f reflect(const Eigen::Vector3f& vec,
+                               const Eigen::Vector3f& axis) {
+  auto costheta = vec.dot(axis);
+  return (2 * costheta * axis - vec).normalized();
+}
+
+struct light {
+  Eigen::Vector3f position;
+  Eigen::Vector3f intensity;
+};
+
+
+Eigen::Vector3f texture_fragment_shader(
+    const fragment_shader_payload& payload) {
+  Eigen::Vector3f return_color = {0, 0, 0};
+  if (payload.texture) {
+    // TODO:
+    // Get the texture value at the texture coordinates of the current fragment
+    // using Texture::getColor() function.
+    return_color = payload.texture->getColorBilinear(payload.tex_coords.x(), payload.tex_coords.y());
+  }
+  Eigen::Vector3f texture_color;
+  texture_color << return_color.x(), return_color.y(), return_color.z();
+
+  Eigen::Vector3f ka = Eigen::Vector3f(0.005, 0.005, 0.005);
+  Eigen::Vector3f kd = texture_color / 255.f;
+  Eigen::Vector3f ks = Eigen::Vector3f(0.7937, 0.7937, 0.7937);
+
+  auto l1 = light{{20, 20, 20}, {500, 500, 500}};
+  auto l2 = light{{-20, 20, 0}, {500, 500, 500}};
+
+  std::vector<light> lights = {l1, l2};
+  Eigen::Vector3f amb_light_intensity{10, 10, 10};
+  Eigen::Vector3f eye_pos{0, 0, 10};
+
+  float p = 150;
+
+  Eigen::Vector3f color = texture_color;
+  Eigen::Vector3f point = payload.view_pos;
+  Eigen::Vector3f normal = payload.normal;
+
+  Eigen::Vector3f result_color = {0, 0, 0};
+  Vector3f view_dir = (eye_pos - point).normalized();
+  for (auto& light : lights) {
+    // TODO:
+    // 1. For each light source, calculate the *ambient*, *diffuse*, and
+    //    *specular* components.
+    // 2. Then, accumulate the results on the *result_color* variable.
+        
+    Vector3f l = (light.position - point);
+    float r2 = l.dot(l);
+    l = l.normalized();
+    Vector3f n = normal;
+    Vector3f v = view_dir;
+    Vector3f h = (v+l).normalized();
+
+    float ndotl = n.dot(l);
+    float ndoth = n.dot(h);
+
+    Vector3f I = light.intensity;
+
+    result_color += ka.cwiseProduct(amb_light_intensity) + kd.cwiseProduct(I / r2) * std::max<float>(ndotl, 0.0) + ks.cwiseProduct(I / r2) * std::powf(std::max<float>(ndoth, 0.0), p);
+  }
+
+  return result_color * 255.f;
+}
+
+
+int main(int argc, const char** argv) {
+  std::vector<Triangle*> TriangleList;
+  float angle = 140.0;
+  bool command_line = false;
+  std::string filename = "output.png";
+  objl::Loader Loader;
+  std::string obj_path = "./models/spot/spot_control_mesh.obj";
+  rst::rasterizer r(700, 700);
+  std::string texture_path = "spot_texture.png";
+  // auto texture_path = std::string(argv[2]);//"hmap.jpg";
+  std::function<Eigen::Vector3f(fragment_shader_payload)> active_shader =texture_fragment_shader;
+  r.set_vertex_shader(vertex_shader);
+  r.set_fragment_shader(active_shader);
+  Eigen::Vector3f eye_pos = {0, 0, 10};
+  if (argc >=2) command_line = true;
+  if (argc == 3) {
+    filename = std::string(argv[1]);
+    obj_path = std::string(argv[2]);
+    std::cout << "Rasterizing using the normal shader\n";
+    active_shader = normal_fragment_shader;
+    r.set_fragment_shader(active_shader);
+  }
+  else if (argc == 4 ) {
+        filename = std::string(argv[1]);
+        obj_path = std::string(argv[2]);
+        texture_path = std::string(argv[3]);
+        std::cout << "Rasterizing using the texture shader\n";
+        active_shader = texture_fragment_shader;
+        r.set_fragment_shader(active_shader);
+        r.set_texture(Texture( texture_path));
+    }
+    
+  if (command_line) {
+    read_obj_file(Loader, obj_path, TriangleList);
+    std::cout<< "Rasterizing using commandline model\n";
+    r.clear(rst::Buffers::Color | rst::Buffers::Depth);
+    r.set_model(get_model_matrix(angle));
+    r.set_view(get_view_matrix(eye_pos));
+    r.set_projection(get_projection_matrix(45.0, 1, 0.1, 50));
+
+    std::cout << "1" << std::endl;
+
+    r.draw(TriangleList);
+    std::cout << TriangleList.size() << std::endl;
+    cv::Mat image(700, 700, CV_32FC3, r.frame_buffer().data());
+    image.convertTo(image, CV_8UC3, 1.0f);
+    cv::cvtColor(image, image, cv::COLOR_RGB2BGR);
+
+    std::cout << "2" << std::endl;
+/*
+    bool is_using_bilinear = r.texture->is_using_bilinear;
+    if(is_using_bilinear)
+        std::cout << "Bilinear interpolation is used for texture sampling.\n";
+    else
+        std::cout << "Nearest neighbor sampling is used for texture sampling.\n";
+    cv::imwrite(filename, image);
+*/
+    return 0;
+  }
+  
+  read_obj_file(Loader, obj_path, TriangleList);
+  r.set_texture(Texture(texture_path));
+
+
+
+  // Load .obj File
+
+
+
+  int key = 0;
+  int frame_count = 0;
+
+
+  while (key != 'q') {
+    r.clear(rst::Buffers::Color | rst::Buffers::Depth);
+
+    r.set_model(get_model_matrix(angle));
+    r.set_view(get_view_matrix(eye_pos));
+    r.set_projection(get_projection_matrix(45.0, 1, 0.1, 50));
+
+    // r.draw(pos_id, ind_id, col_id, rst::Primitive::Triangle);
+    r.draw(TriangleList);
+    cv::Mat image(700, 700, CV_32FC3, r.frame_buffer().data());
+    image.convertTo(image, CV_8UC3, 1.0f);
+    cv::cvtColor(image, image, cv::COLOR_RGB2BGR);
+
+    cv::imshow("image", image);
+    cv::imwrite(filename, image);
+    key = cv::waitKey(0);
+
+    if (key == 'a') {
+      angle -= 0.1;
+    } else if (key == 'd') {
+      angle += 0.1;
+    }
+  }
+  return 0;
+}
+
+void read_obj_file(objl::Loader &Loader, std::string &obj_path, std::vector<Triangle *> &TriangleList)
+{
+  bool loadout = Loader.LoadFile(obj_path);
+  for (auto mesh : Loader.LoadedMeshes)
+  {
+    for (int i = 0; i < mesh.Vertices.size(); i += 3)
+    {
+      Triangle *t = new Triangle();
+      for (int j = 0; j < 3; j++)
+      {
+        t->setVertex(j, Vector4f(mesh.Vertices[i + j].Position.X,
+                                 mesh.Vertices[i + j].Position.Y,
+                                 mesh.Vertices[i + j].Position.Z, 1.0));
+        t->setNormal(j, Vector3f(mesh.Vertices[i + j].Normal.X,
+                                 mesh.Vertices[i + j].Normal.Y,
+                                 mesh.Vertices[i + j].Normal.Z));
+        t->setTexCoord(j, Vector2f(mesh.Vertices[i + j].TextureCoordinate.X,
+                                   mesh.Vertices[i + j].TextureCoordinate.Y));
+      }
+      TriangleList.push_back(t);
+    }
+  }
+}

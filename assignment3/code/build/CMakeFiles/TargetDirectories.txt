@@ -1,0 +1,3 @@
+/home/lenob0dy/Projects/cs4361/assignment3/code/build/CMakeFiles/Rasterizer.dir
+/home/lenob0dy/Projects/cs4361/assignment3/code/build/CMakeFiles/edit_cache.dir
+/home/lenob0dy/Projects/cs4361/assignment3/code/build/CMakeFiles/rebuild_cache.dir
