@@ -59,13 +59,27 @@ Eigen::Matrix3f rotZ(float a) {
     return R;
 }
 
+Eigen::Vector3f lerp(Eigen::Vector3f first, Eigen::Vector3f second, float t) {
+    return first * t + second * (1 - t);
+}
+
 Eigen::Vector3f de_casteljau(std::vector<Eigen::Vector3f> pts, float t) {
     // TODO: Implement the De Casteljau algorithm.
     //       Repeatedly reduce the point list by linearly interpolating each
     //       consecutive pair using parameter t, until one point remains.
     //       Return that final point.
 
-    return pts[0];
+    std::vector<Eigen::Vector3f> curr, next;
+    curr = pts;
+
+    while (curr.size() > 1) {
+        for (int i = 0; i < curr.size() - 1; i++) {
+            next.push_back(lerp(curr[i], curr[i + 1], t));
+        }
+        curr = std::move(next);
+    }
+
+    return curr[0];
 }
 
 void precompute_lines(
@@ -79,11 +93,11 @@ void precompute_lines(
         for (int i = 0; i < num_points_per_axis - 1; ++i) {
             Eigen::Vector3f p0 = control_points_3d[i * num_points_per_axis + j];
             Eigen::Vector3f p1 = control_points_3d[(i+1) * num_points_per_axis + j];
-            for (float t = 0.0f; t <= 1.0f; t += step_t)
+            for (float t = 0.0f; t <= 1.0f; t += step_t) {
                 // TODO: Linearly interpolate between p0 and p1 at parameter t
                 //       and push the result into `vertical`.
-
-                {}
+                vertical.push_back(lerp(p0, p1, t));
+            }
         }
     for (int i = 0; i < num_points_per_axis; ++i)
         for (int j = 0; j < num_points_per_axis - 1; ++j) {
@@ -92,7 +106,9 @@ void precompute_lines(
             for (float t = 0.0f; t <= 1.0f; t += step_t)
                 // TODO: Linearly interpolate between p0 and p1 at parameter t
                 //       and push the result into `horizontal`.
-                {}
+                {
+                    horizontal.push_back(lerp(p0, p1, t));
+                }
             }
             int n = num_points_per_axis;
             for (int d = 0; d <= 2 * (n - 1); ++d) {
@@ -107,8 +123,10 @@ void precompute_lines(
                 for (float t = 0.0f; t <= 1.0f; t += step_t)
                 // TODO: Linearly interpolate between diag[k] and diag[k+1] at parameter t
                 //       and push the result into `diagonal`.
-                
-                {}
+
+                {
+                    diagonal.push_back(lerp(diag[k], diag[k + 1], t));
+                }
     }
 }
 
@@ -126,7 +144,9 @@ void precompute_bezier_curves(
         for (float t = 0.0f; t <= 1.0f; t += step_t)
             // TODO: Evaluate the Bezier curve defined by control points `col` at parameter t
             //       using de_casteljau() and push the result into `vertical`.
-            {}
+            {
+                vertical.push_back(de_casteljau(col, t));
+            }
     }
     for (int i = 0; i < num_points_per_axis; ++i) {
         std::vector<Eigen::Vector3f> row(num_points_per_axis);
@@ -135,7 +155,9 @@ void precompute_bezier_curves(
         for (float t = 0.0f; t <= 1.0f; t += step_t)
             // TODO: Evaluate the Bezier curve defined by control points `row` at parameter t
             //       using de_casteljau() and push the result into `horizontal`.
-            {}
+            {
+                horizontal.push_back(de_casteljau(row, t));
+            }
 
     }
     int n = num_points_per_axis;
@@ -150,7 +172,9 @@ void precompute_bezier_curves(
         for (float t = 0.0f; t <= 1.0f; t += step_t)
             // TODO: Evaluate the Bezier curve defined by the diagonal control points `diag` at parameter t
             //       using de_casteljau() and push the result into `diagonal`.
-            {}
+            {
+                diagonal.push_back(de_casteljau(diag, t));
+            }
     }
 }
 
@@ -185,9 +209,6 @@ Eigen::Vector3f compute_centroid(const std::vector<Eigen::Vector3f>& pts) {
     c /= static_cast<float>(pts.size());
     return c;
 }
-
-
-
 
 // Renders one snapshot of the scene to a cv::Mat using the given rotation (degrees) and mode
 cv::Mat render_snapshot(

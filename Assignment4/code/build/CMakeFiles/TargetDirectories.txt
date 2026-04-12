@@ -1,3 +1,0 @@
-/home/lenob0dy/Projects/cs4361/Assignment4/code/build/CMakeFiles/BezierCurve.dir
-/home/lenob0dy/Projects/cs4361/Assignment4/code/build/CMakeFiles/edit_cache.dir
-/home/lenob0dy/Projects/cs4361/Assignment4/code/build/CMakeFiles/rebuild_cache.dir
